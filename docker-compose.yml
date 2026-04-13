@@ -1,0 +1,13 @@
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./sessions.json:/app/sessions.json
+      - ollama_models:/root/.ollama
+    entrypoint: ["sh", "-c", "ollama serve & sleep 15 && ollama pull llama3.2 && ollama pull nomic-embed-text && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+
+volumes:
+  ollama_models:

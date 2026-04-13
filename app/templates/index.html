@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Чат-бот стажировки</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        #chat { height: 400px; overflow: auto; border: 1px solid #ccc; padding: 10px; margin-bottom: 10px; }
+        #message { width: 70%; padding: 8px; }
+        button { padding: 8px 16px; margin-left: 10px; }
+        .user { color: blue; margin: 5px 0; }
+        .bot { color: green; margin: 5px 0; }
+        .system { color: gray; font-style: italic; margin: 5px 0; }
+    </style>
+</head>
+<body>
+    <h2>Чат-бот консультант стажировки</h2>
+    
+    <div style="margin-bottom:10px;padding:10px;background:#f0f0f0;">
+        <b>Сессии:</b>
+        <select id="sessionSelect" onchange="switchSession()" style="margin-left:10px;padding:5px;">
+            <option value="">-- Выберите сессию --</option>
+        </select>
+        <button onclick="loadSessionsList()">Обновить</button>
+        <button onclick="newSession()">Новая сессия</button>
+        <button onclick="deleteCurrentSession()" style="color:red;">Удалить</button>
+        <span id="currentSessionSpan" style="margin-left:10px;font-size:12px;"></span>
+    </div>
+    
+    <div id="chat"></div>
+    
+    <input type="text" id="message" placeholder="Введите ваш вопрос...">
+    <button onclick="sendMessage()">Отправить</button>
+    
+    <script>
+        let currentSessionId = null;
+        
+        async function loadSessionsList() {
+            try {
+                let response = await fetch('/sessions');
+                let data = await response.json();
+                
+                let select = document.getElementById('sessionSelect');
+                select.innerHTML = '<option value="">-- Выберите сессию --</option>';
+                
+                if (data.sessions && data.sessions.length > 0) {
+                    for (let sess of data.sessions) {
+                        let option = document.createElement('option');
+                        option.value = sess.id;
+                        let shortId = sess.id.substring(0, 8) + '...';
+                        option.text = shortId + ' (' + sess.messages_count + ' сообщ.)';
+                        if (currentSessionId === sess.id) {
+                            option.selected = true;
+                        }
+                        select.appendChild(option);
+                    }
+                }
+            } catch (error) {
+                console.error('Ошибка:', error);
+            }
+        }
+        
+        async function switchSession() {
+            let select = document.getElementById('sessionSelect');
+            let newSessionId = select.value;
+            if (!newSessionId) return;
+            
+            currentSessionId = newSessionId;
+            document.getElementById('currentSessionSpan').innerHTML = 'Текущая: ' + currentSessionId.substring(0, 8) + '...';
+            await loadChatHistory();
+        }
+        
+        async function loadChatHistory() {
+            if (!currentSessionId) {
+                document.getElementById('chat').innerHTML = '<div class="system">Выберите сессию или создайте новую</div>';
+                return;
+            }
+            
+            try {
+                let response = await fetch('/history/' + currentSessionId);
+                let data = await response.json();
+                
+                let chatDiv = document.getElementById('chat');
+                chatDiv.innerHTML = '';
+                
+                if (data.history && data.history.length > 0) {
+                    for (let msg of data.history) {
+                        let className = msg.role === 'user' ? 'user' : 'bot';
+                        let label = msg.role === 'user' ? 'Вы' : 'Бот';
+                        chatDiv.innerHTML += `<div class="${className}"><b>${label}:</b> ${msg.content}</div>`;
+                    }
+                } else {
+                    chatDiv.innerHTML = '<div class="bot"><b>Бот:</b> Здравствуйте! Чем могу помочь?</div>';
+                }
+                chatDiv.scrollTop = chatDiv.scrollHeight;
+            } catch (error) {
+                console.error('Ошибка:', error);
+            }
+        }
+        
+        async function sendMessage() {
+            let input = document.getElementById('message');
+            let message = input.value.trim();
+            if (!message) return;
+            
+            let chatDiv = document.getElementById('chat');
+            chatDiv.innerHTML += `<div class="user"><b>Вы:</b> ${message}</div>`;
+            input.value = '';
+            chatDiv.scrollTop = chatDiv.scrollHeight;
+            
+            let dataToSend = {message: message};
+            if (currentSessionId) {
+                dataToSend.session_id = currentSessionId;
+            }
+            
+            try {
+                let response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(dataToSend)
+                });
+                
+                let data = await response.json();
+                
+                if (!currentSessionId) {
+                    currentSessionId = data.session_id;
+                    document.getElementById('currentSessionSpan').innerHTML = 'Текущая: ' + currentSessionId.substring(0, 8) + '...';
+                    await loadSessionsList();
+                }
+                
+                chatDiv.innerHTML += `<div class="bot"><b>Бот:</b> ${data.answer}</div>`;
+                chatDiv.scrollTop = chatDiv.scrollHeight;
+                
+            } catch (error) {
+                chatDiv.innerHTML += `<div class="system"><b>Ошибка:</b> ${error.message}</div>`;
+            }
+        }
+        
+        function newSession() {
+            currentSessionId = null;
+            document.getElementById('currentSessionSpan').innerHTML = '';
+            document.getElementById('chat').innerHTML = '<div class="bot"><b>Бот:</b> Новая сессия. Задайте вопрос.</div>';
+            document.getElementById('sessionSelect').value = '';
+            loadSessionsList();
+        }
+        
+        async function deleteCurrentSession() {
+            if (!currentSessionId) {
+                alert('Нет активной сессии');
+                return;
+            }
+            if (!confirm('Удалить эту сессию?')) return;
+            
+            try {
+                let response = await fetch('/session/' + currentSessionId, {method: 'DELETE'});
+                if (response.ok) {
+                    alert('Сессия удалена');
+                    newSession();
+                    await loadSessionsList();
+                }
+            } catch (error) {
+                console.error(error);
+            }
+        }
+        
+        document.getElementById('message').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') sendMessage();
+        });
+        
+        loadSessionsList();
+    </script>
+</body>
+</html>

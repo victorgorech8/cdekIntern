@@ -1,1 +1,15 @@
 .venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+build
+.env
+.venv
+venv
+ENV
+.vscode
+.idea
+*.log
