@@ -1,0 +1,8 @@
+- chromadb
+- fastapi
+- langchain
+- langchain-community
+- langchain-ollama
+- pydantic
+- python-multipart
+- uvicorn
